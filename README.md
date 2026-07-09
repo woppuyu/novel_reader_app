@@ -16,7 +16,7 @@ NovelHub is a modern, distraction-free, 100% full-screen web novel reader and se
 *   **🔄 Native Gestures & Navigation**:
     *   **Pull-to-Refresh**: Swipe down from the top of any WebView to reload the active web page.
     *   **Smart Back Navigation**: Pressing your phone's hardware back button steps back through the WebView's browsing history instead of closing the app. If you are on the homepage, it exits cleanly.
-*   **💾 Local Persistence**: All site settings, custom tabs, and cookie/session states are saved locally so you remain logged in and your layouts persist across app launches.
+*   **💾 Local Persistence & Save Code Backup**: All site settings, custom tabs, and cookie/session states are saved locally. You can export/import your entire list of tabs and active reading progress using lightweight, copy-pasteable Base64 Save Codes to easily sync across devices.
 
 ---
 
@@ -57,6 +57,7 @@ lib/
 │   └── site_repository.dart    # SharedPreferences local disk storage coordinator
 ├── screens/
 │   ├── add_site_screen.dart    # Bottom sheet form to configure and register new sites
+│   ├── settings_screen.dart    # Overlay screen holding backup Save Code import/export tools
 │   └── novel_hub_screen.dart   # Main Scaffold, PopScope, and floating docking gesture layer
 └── state/
     └── novel_hub_state.dart    # Central state provider mapping index shifting and tab management
@@ -67,6 +68,7 @@ lib/
 ## 💡 Quick Tips
 
 1.  **Adding a Site**: Tap the floating explore button in the bottom right, select **Add New Site**, and type a name and URL (e.g. `royalroad.com`). You can omit the `https://` scheme; the app normalizes it automatically.
-2.  **Fast Link Saving**: While reading or searching inside the WebView, tap and hold on any link to trigger the Add Site menu prefilled with that link's details.
+2.  **Fast Link Saving**: While reading or searching inside the WebView, tap and hold on any link to trigger the Add Site menu prefilled with that link's details. If you already have a tab with the same root host, it will ask if you want to open it there instead.
 3.  **Rearranging Tabs**: Open the explore panel and use the three horizontal lines drag handles (`=`) to swap tab order.
 4.  **Confirming Changes**: Long-pressing a tab item inside the Control Panel will ask if you want to switch it from Reading Mode to Query Mode (or vice versa).
+5.  **Backup & Syncing**: Tap the gear icon (`⚙️`) in the explore panel to open **Settings**. From there, you can generate a copy-pasteable save code to backup or transfer your progress to another phone.

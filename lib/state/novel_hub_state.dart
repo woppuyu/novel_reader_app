@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:novel_reader_app/controllers/site_tab_controller.dart';
 import 'package:novel_reader_app/models/site_config.dart';
 import 'package:novel_reader_app/models/site_type.dart';
@@ -211,6 +213,7 @@ class NovelHubState extends ChangeNotifier {
               s,
               onScroll: updateFabVisibility,
               onLinkLongPress: handleLinkLongPress,
+              onUrlChanged: (url) => handleUrlChanged(s.id, url),
             ))
         .toList();
     isLoading = false;
@@ -248,6 +251,7 @@ class NovelHubState extends ChangeNotifier {
       site,
       onScroll: updateFabVisibility,
       onLinkLongPress: handleLinkLongPress,
+      onUrlChanged: (url) => handleUrlChanged(site.id, url),
     ));
 
     // Switch mode and index to the newly added site.
@@ -389,6 +393,7 @@ class NovelHubState extends ChangeNotifier {
       newSite,
       onScroll: updateFabVisibility,
       onLinkLongPress: handleLinkLongPress,
+      onUrlChanged: (url) => handleUrlChanged(newSite.id, url),
     );
 
     // Adjust active indices for both modes to prevent index out of bounds
@@ -409,5 +414,144 @@ class NovelHubState extends ChangeNotifier {
     // Save to SharedPreferences
     await _repository.saveSites(sites);
     restoreFab();
+  }
+
+  /// Updates the last visited URL of a site config and persists it.
+  void handleUrlChanged(String id, String url) {
+    final index = sites.indexWhere((s) => s.id == id);
+    if (index == -1) return;
+
+    if (sites[index].lastVisitedUrl == url) return;
+
+    sites[index] = sites[index].copyWith(lastVisitedUrl: url);
+    _repository.saveSites(sites);
+  }
+
+  /// Loads [url] inside an existing site tab, updates its history, and shifts focus.
+  void openUrlInSite(String siteId, String url) {
+    final index = sites.indexWhere((s) => s.id == siteId);
+    if (index == -1) return;
+
+    final targetSite = sites[index];
+    final ctrl = controllers[index];
+
+    // Load the URL in the controller
+    ctrl.webViewController.loadRequest(Uri.parse(url));
+
+    // Update the lastVisitedUrl state and SharedPreferences
+    handleUrlChanged(siteId, url);
+
+    // Switch active mode and tab index to point to this site
+    final isReader = targetSite.type == SiteType.reader;
+    if (isReader) {
+      currentMode = NovelHubMode.reading;
+      final readIndex = readingSites.indexWhere((s) => s.id == siteId);
+      if (readIndex != -1) activeReadingIndex = readIndex;
+    } else {
+      currentMode = NovelHubMode.query;
+      final queryIndex = querySites.indexWhere((s) => s.id == siteId);
+      if (queryIndex != -1) activeQueryIndex = queryIndex;
+    }
+
+    showFab = true;
+    restoreFab();
+  }
+
+  /// Exports all sites and progress into an obfuscated copy-pasteable Base64 string
+  /// and automatically copies it to the system clipboard.
+  Future<String> exportSaveCode() async {
+    try {
+      final jsonList = sites.map((s) => s.toJson()).toList();
+      final jsonString = jsonEncode(jsonList);
+      final bytes = utf8.encode(jsonString);
+      final saveCode = base64.encode(bytes);
+
+      // Copy directly to the system clipboard
+      await Clipboard.setData(ClipboardData(text: saveCode));
+      return saveCode;
+    } catch (e) {
+      debugPrint('Export error: $e');
+      rethrow;
+    }
+  }
+
+  /// Restores sites and reading progress from a pasted Base64 save code.
+  /// Merges them with the existing list of sites.
+  Future<int> importSaveCode(String saveCode) async {
+    try {
+      final code = saveCode.trim();
+      if (code.isEmpty) return 0;
+
+      final decodedBytes = base64.decode(code);
+      final jsonString = utf8.decode(decodedBytes);
+      final decoded = jsonDecode(jsonString);
+
+      if (decoded is! List) {
+        throw const FormatException('Save code is not a valid list representation.');
+      }
+
+      final List<SiteConfig> importedSites = [];
+      for (final item in decoded) {
+        if (item is! Map<String, dynamic> ||
+            item['id'] == null ||
+            item['name'] == null ||
+            item['baseUrl'] == null) {
+          throw const FormatException('Invalid SiteConfig structure in save code.');
+        }
+        importedSites.add(SiteConfig.fromJson(item));
+      }
+
+      if (importedSites.isEmpty) {
+        return 0;
+      }
+
+      // Merge imported sites into existing list based on id or baseUrl
+      for (final imported in importedSites) {
+        final existingIndex = sites.indexWhere(
+          (s) => s.id == imported.id || s.baseUrl == imported.baseUrl,
+        );
+
+        if (existingIndex != -1) {
+          // Update the configuration, keeping the imported details (including lastVisitedUrl!)
+          sites[existingIndex] = imported;
+        } else {
+          sites.add(imported);
+        }
+      }
+
+      // Save merged sites list to SharedPreferences
+      await _repository.saveSites(sites);
+
+      // Re-initialize all controllers
+      controllers = sites
+          .map((s) => SiteTabController(
+                s,
+                onScroll: updateFabVisibility,
+                onLinkLongPress: handleLinkLongPress,
+                onUrlChanged: (url) => handleUrlChanged(s.id, url),
+              ))
+          .toList();
+
+      // Reset tabs active index boundaries to be safe
+      final readLen = readingSites.length;
+      if (readLen > 0) {
+        activeReadingIndex = activeReadingIndex.clamp(0, readLen - 1);
+      } else {
+        activeReadingIndex = 0;
+      }
+
+      final queryLen = querySites.length;
+      if (queryLen > 0) {
+        activeQueryIndex = activeQueryIndex.clamp(0, queryLen - 1);
+      } else {
+        activeQueryIndex = 0;
+      }
+
+      notifyListeners();
+      return importedSites.length;
+    } catch (e) {
+      debugPrint('Import error: $e');
+      rethrow;
+    }
   }
 }

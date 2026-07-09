@@ -37,6 +37,9 @@ class SiteConfig {
   /// (not yet implemented — the flag is here for future use).
   final bool persistCookies;
 
+  /// The last URL visited on this site tab (persisted browser history).
+  final String? lastVisitedUrl;
+
   const SiteConfig({
     required this.id,
     required this.name,
@@ -45,7 +48,31 @@ class SiteConfig {
     required this.type,
     this.iconUrl,
     this.persistCookies = true,
+    this.lastVisitedUrl,
   });
+
+  /// Creates a copy of this [SiteConfig] with the given fields replaced.
+  SiteConfig copyWith({
+    String? id,
+    String? name,
+    String? baseUrl,
+    String? searchUrlTemplate,
+    SiteType? type,
+    String? iconUrl,
+    bool? persistCookies,
+    String? lastVisitedUrl,
+  }) {
+    return SiteConfig(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      baseUrl: baseUrl ?? this.baseUrl,
+      searchUrlTemplate: searchUrlTemplate ?? this.searchUrlTemplate,
+      type: type ?? this.type,
+      iconUrl: iconUrl ?? this.iconUrl,
+      persistCookies: persistCookies ?? this.persistCookies,
+      lastVisitedUrl: lastVisitedUrl ?? this.lastVisitedUrl,
+    );
+  }
 
   /// Deserialises a [SiteConfig] from a JSON map (as stored in SharedPreferences).
   factory SiteConfig.fromJson(Map<String, dynamic> json) {
@@ -57,6 +84,7 @@ class SiteConfig {
       type: siteTypeFromString(json['type'] as String? ?? 'reader'),
       iconUrl: json['iconUrl'] as String?,
       persistCookies: json['persistCookies'] as bool? ?? true,
+      lastVisitedUrl: json['lastVisitedUrl'] as String?,
     );
   }
 
@@ -70,9 +98,19 @@ class SiteConfig {
       'type': siteTypeToString(type),
       'iconUrl': iconUrl,
       'persistCookies': persistCookies,
+      'lastVisitedUrl': lastVisitedUrl,
     };
   }
 
-  /// The default sites seeded on first launch (starts empty by default).
-  static List<SiteConfig> get defaultSites => [];
+  /// The default sites seeded on first launch (contains a Google query tab).
+  static List<SiteConfig> get defaultSites => [
+        const SiteConfig(
+          id: 'google',
+          name: 'Google',
+          baseUrl: 'https://google.com',
+          searchUrlTemplate: 'https://www.google.com/search?q={query}',
+          type: SiteType.search,
+          persistCookies: true,
+        ),
+      ];
 }

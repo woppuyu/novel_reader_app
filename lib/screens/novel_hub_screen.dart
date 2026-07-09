@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:novel_reader_app/state/novel_hub_state.dart';
+import 'package:novel_reader_app/models/site_config.dart';
 import 'package:novel_reader_app/models/site_type.dart';
 import 'package:novel_reader_app/screens/add_site_screen.dart';
+import 'package:novel_reader_app/screens/settings_screen.dart';
 import 'package:webview_refresher/webview_refresher.dart';
 
 /// The main screen of NovelHub.
@@ -42,11 +44,38 @@ class NovelHubScreen extends StatelessWidget {
       final prefilledUrl = state.pendingSiteUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         state.clearPendingSite();
-        _openAddSite(
-          context,
-          initialName: prefilledName,
-          initialUrl: prefilledUrl,
-        );
+
+        // Check if we already have a site with the same host/domain
+        SiteConfig? existingSite;
+        try {
+          final pendingUri = Uri.parse(prefilledUrl);
+          for (final site in state.sites) {
+            final siteUri = Uri.parse(site.baseUrl);
+            if (pendingUri.host == siteUri.host) {
+              existingSite = site;
+              break;
+            }
+          }
+        } catch (_) {}
+
+        if (existingSite != null) {
+          _showOpenExistingConfirmDialog(
+            context,
+            state,
+            existingSite,
+            prefilledName,
+            prefilledUrl,
+          );
+        } else {
+          _openAddSite(
+            context,
+            initialName: prefilledName,
+            initialUrl: prefilledUrl,
+            initialType: state.currentMode == NovelHubMode.reading
+                ? SiteType.reader
+                : SiteType.search,
+          );
+        }
       });
     }
 
@@ -78,7 +107,22 @@ class NovelHubScreen extends StatelessWidget {
               child: currentSites.isEmpty
                   ? _EmptyState(
                       mode: state.currentMode,
-                      onAddSite: () => _openAddSite(context),
+                      onAddSite: () => _openAddSite(
+                        context,
+                        initialType: state.currentMode == NovelHubMode.reading
+                            ? SiteType.reader
+                            : SiteType.search,
+                      ),
+                      onSearchForSites: () {
+                        // Switch mode to Query Mode
+                        state.setMode(NovelHubMode.query);
+                        // If a Google tab is available, focus it
+                        final googleIndex = state.querySites.indexWhere(
+                            (s) => s.baseUrl.contains('google.com'));
+                        if (googleIndex != -1) {
+                          state.setActiveTab(googleIndex);
+                        }
+                      },
                     )
                   : IndexedStack(
                       // Uses state.globalActiveIndex to map current active mode tab
@@ -140,6 +184,7 @@ class NovelHubScreen extends StatelessWidget {
     BuildContext context, {
     String? initialName,
     String? initialUrl,
+    SiteType? initialType,
   }) {
     showModalBottomSheet<void>(
       context: context,
@@ -151,7 +196,58 @@ class NovelHubScreen extends StatelessWidget {
       builder: (_) => AddSiteScreen(
         initialName: initialName,
         initialUrl: initialUrl,
+        initialType: initialType,
       ),
+    );
+  }
+
+  /// Prompts the user to confirm loading a link in an existing tab instead of creating a new one.
+  static void _showOpenExistingConfirmDialog(
+    BuildContext context,
+    NovelHubState state,
+    SiteConfig existingSite,
+    String prefilledName,
+    String prefilledUrl,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Open in Existing Tab?'),
+          content: Text(
+            'You already have a tab for "${existingSite.name}". Do you want to open this link in that tab instead of adding a new one?',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('No, Add Tab'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                _openAddSite(
+                  context,
+                  initialName: prefilledName,
+                  initialUrl: prefilledUrl,
+                  initialType: state.currentMode == NovelHubMode.reading
+                      ? SiteType.reader
+                      : SiteType.search,
+                );
+              },
+            ),
+            FilledButton(
+              onPressed: () {
+                state.openUrlInSite(existingSite.id, prefilledUrl);
+                Navigator.of(context).pop(); // Close dialog
+              },
+              child: const Text('Yes, Open'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -308,17 +404,42 @@ class _ControlPanelSheet extends StatelessWidget {
                   ),
           ),
 
-          // ── Add Site Action Row ────────────────────────────────────────────
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context); // Close control sheet first
-              NovelHubScreen._openAddSite(context);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add New Site'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context); // Close control sheet first
+                    NovelHubScreen._openAddSite(
+                      context,
+                      initialType: state.currentMode == NovelHubMode.reading
+                          ? SiteType.reader
+                          : SiteType.search,
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add New Site'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: () {
+                  Navigator.pop(context); // Close sheet
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (context) => const SettingsScreen(),
+                      fullscreenDialog: true,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
+              ),
+            ],
           ),
         ],
       ),
@@ -409,10 +530,12 @@ class _ControlPanelSheet extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final NovelHubMode mode;
   final VoidCallback onAddSite;
+  final VoidCallback? onSearchForSites;
 
   const _EmptyState({
     required this.mode,
     required this.onAddSite,
+    this.onSearchForSites,
   });
 
   @override
@@ -420,7 +543,7 @@ class _EmptyState extends StatelessWidget {
     final isReading = mode == NovelHubMode.reading;
     final title = isReading ? 'No reading sites' : 'No query sites';
     final description = isReading
-        ? 'Add your web novel reading sites (like Royal Road, custom blogs) here.'
+        ? 'Search for sites online using Google to find novels to read, or add a site manually.'
         : 'Add novel search directories, forums, or reference pages here.';
 
     return Center(
@@ -446,11 +569,24 @@ class _EmptyState extends StatelessWidget {
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onAddSite,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Site'),
-            ),
+            if (isReading && onSearchForSites != null) ...[
+              FilledButton.icon(
+                onPressed: onSearchForSites,
+                icon: const Icon(Icons.search),
+                label: const Text('Search for Sites'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onAddSite,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Site Manually'),
+              ),
+            ] else
+              FilledButton.icon(
+                onPressed: onAddSite,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Site'),
+              ),
           ],
         ),
       ),

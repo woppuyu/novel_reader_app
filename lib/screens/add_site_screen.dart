@@ -11,11 +11,13 @@ import 'package:novel_reader_app/state/novel_hub_state.dart';
 class AddSiteScreen extends StatefulWidget {
   final String? initialName;
   final String? initialUrl;
+  final SiteType? initialType;
 
   const AddSiteScreen({
     super.key,
     this.initialName,
     this.initialUrl,
+    this.initialType,
   });
 
   @override
@@ -34,6 +36,9 @@ class _AddSiteScreenState extends State<AddSiteScreen> {
     super.initState();
     _nameController.text = widget.initialName ?? '';
     _baseUrlController.text = widget.initialUrl ?? '';
+    if (widget.initialType != null) {
+      _selectedType = widget.initialType!;
+    }
   }
 
   String _normalizeUrl(String url) {

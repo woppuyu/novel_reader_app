@@ -24,6 +24,7 @@ class SiteTabController {
     this.siteConfig, {
     required void Function(bool visible) onScroll,
     required void Function(String name, String url) onLinkLongPress,
+    required void Function(String url) onUrlChanged,
   }) {
     // Create and configure the WebViewController once during construction.
     webViewController = WebViewController()
@@ -48,8 +49,14 @@ class SiteTabController {
           onNavigationRequest: (NavigationRequest request) {
             return NavigationDecision.navigate;
           },
+          onUrlChange: (UrlChange change) {
+            if (change.url != null) {
+              onUrlChanged(change.url!);
+            }
+          },
           onPageFinished: (url) {
             _finishRefresh();
+            onUrlChanged(url);
             // Inject long-press listener and CSS callout disable rules
             webViewController.runJavaScript('''
               (function() {
@@ -103,8 +110,8 @@ class SiteTabController {
           onScroll(true);
         }
       })
-      // Load the site's home page on startup.
-      ..loadRequest(Uri.parse(siteConfig.baseUrl));
+      // Load the last visited page if available, otherwise the default base URL.
+      ..loadRequest(Uri.parse(siteConfig.lastVisitedUrl ?? siteConfig.baseUrl));
   }
 
   /// Searches the site by replacing the `{query}` placeholder in
