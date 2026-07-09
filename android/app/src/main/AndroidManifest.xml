@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET permission is required for WebView to load external websites -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="novel_reader_app"
+        android:label="NovelHub"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

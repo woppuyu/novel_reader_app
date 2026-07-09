@@ -1,30 +1,23 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+// Basic smoke test for the NovelHub app.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:novel_reader_app/main.dart';
+import 'package:provider/provider.dart';
+import 'package:novel_reader_app/state/novel_hub_state.dart';
+import 'package:novel_reader_app/screens/novel_hub_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('NovelHub shows loading indicator on startup',
+      (WidgetTester tester) async {
+    final state = NovelHubState(); // isLoading starts true
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<NovelHubState>.value(
+        value: state,
+        child: const MaterialApp(home: NovelHubScreen()),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Before init() completes, the loading indicator should be visible.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
